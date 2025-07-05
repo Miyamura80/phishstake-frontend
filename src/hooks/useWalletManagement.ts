@@ -1,145 +1,69 @@
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-interface StoredWallet {
-  id: string;
-  user_id: string;
-  wallet_address: string;
-  wallet_type: 'embedded' | 'external';
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
 export const useWalletManagement = () => {
-  const { user, unlinkWallet } = usePrivy();
+  const { user } = usePrivy();
   const { wallets } = useWallets();
-  const [storedWallets, setStoredWallets] = useState<StoredWallet[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Execute raw SQL since user_wallets table isn't in the generated types yet
-  const executeSQL = async (query: string): Promise<any> => {
-    const { data, error } = await supabase.rpc('set_user_context', { user_id_param: user?.id || '' });
-    if (error) {
-      console.error('Error setting user context:', error);
+  const storeWalletInDB = async (walletAddress: string, walletType: 'embedded' | 'external') => {
+    if (!user) return;
+
+    try {
+      // Use a direct insert with conflict resolution
+      const { error } = await supabase
+        .from('user_wallets')
+        .upsert({
+          user_id: user.id,
+          wallet_address: walletAddress,
+          wallet_type: walletType,
+          is_active: true
+        }, {
+          onConflict: 'user_id,wallet_address'
+        });
+
+      if (error) {
+        console.error('Error storing wallet:', error);
+      }
+    } catch (error) {
+      console.error('Error in storeWalletInDB:', error);
+    }
+  };
+
+  const removeWalletFromDB = async (walletAddress: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_wallets')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('wallet_address', walletAddress);
+
+      if (error) {
+        console.error('Error removing wallet from DB:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error in removeWalletFromDB:', error);
       throw error;
     }
-
-    // Use a direct query approach - this is a temporary solution until types are regenerated
-    const response = await fetch(`${supabase.supabaseUrl}/rest/v1/rpc/exec_raw_sql`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabase.supabaseKey}`,
-        'apikey': supabase.supabaseKey
-      },
-      body: JSON.stringify({ query })
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to execute SQL');
-    }
-
-    return response.json();
   };
 
-  // Fetch stored wallets from database
-  const fetchStoredWallets = async () => {
-    if (!user) return;
+  const syncWalletsWithDB = async () => {
+    if (!user || !wallets.length) return;
 
-    try {
-      // Set user context for RLS
-      await supabase.rpc('set_user_context', { user_id_param: user.id });
-      
-      // For now, we'll work with the wallets from Privy directly
-      // until the database types are properly regenerated
-      const walletRecords = wallets.map(wallet => ({
-        id: wallet.address,
-        user_id: user.id,
-        wallet_address: wallet.address,
-        wallet_type: wallet.walletClientType === 'privy' ? 'embedded' as const : 'external' as const,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }));
-      
-      setStoredWallets(walletRecords);
-    } catch (error) {
-      console.error('Error fetching stored wallets:', error);
+    for (const wallet of wallets) {
+      const walletType = wallet.walletClientType === 'privy' ? 'embedded' : 'external';
+      await storeWalletInDB(wallet.address, walletType);
     }
   };
 
-  // Store wallet in database (placeholder for now)
-  const storeWallet = async (walletAddress: string, walletType: 'embedded' | 'external') => {
-    if (!user) return;
-    
-    try {
-      await supabase.rpc('set_user_context', { user_id_param: user.id });
-      console.log(`Storing wallet: ${walletAddress} (${walletType}) for user: ${user.id}`);
-      // Database storage will be handled once types are regenerated
-    } catch (error) {
-      console.error('Error storing wallet:', error);
-    }
-  };
-
-  // Mark wallet as inactive in database (placeholder for now)
-  const deactivateWallet = async (walletAddress: string) => {
-    if (!user) return;
-    
-    try {
-      await supabase.rpc('set_user_context', { user_id_param: user.id });
-      console.log(`Deactivating wallet: ${walletAddress} for user: ${user.id}`);
-      // Database update will be handled once types are regenerated
-    } catch (error) {
-      console.error('Error deactivating wallet:', error);
-    }
-  };
-
-  // Delete wallet record from database (placeholder for now)
-  const deleteWalletRecord = async (walletAddress: string) => {
-    if (!user) return;
-    
-    try {
-      await supabase.rpc('set_user_context', { user_id_param: user.id });
-      console.log(`Deleting wallet record: ${walletAddress} for user: ${user.id}`);
-      // Database deletion will be handled once types are regenerated
-      await fetchStoredWallets();
-    } catch (error) {
-      console.error('Error deleting wallet record:', error);
-    }
-  };
-
-  // Unlink external wallet
-  const handleUnlinkWallet = async (walletAddress: string) => {
-    setLoading(true);
-    try {
-      const wallet = wallets.find(w => w.address === walletAddress);
-      if (!wallet) {
-        throw new Error('Wallet not found');
-      }
-
-      if (wallet.walletClientType !== 'privy') {
-        // For external wallets, unlink from Privy
-        await unlinkWallet(walletAddress);
-        await deactivateWallet(walletAddress);
-        toast.success('External wallet unlinked successfully');
-      } else {
-        toast.error('Cannot unlink embedded wallets. Use delete for empty embedded wallets.');
-      }
-    } catch (error) {
-      console.error('Error unlinking wallet:', error);
-      toast.error('Failed to unlink wallet');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Delete embedded wallet (only if empty)
-  const handleDeleteEmbeddedWallet = async (walletAddress: string) => {
-    setLoading(true);
+  const unlinkExternalWallet = async (walletAddress: string) => {
+    setIsLoading(true);
     try {
       const wallet = wallets.find(w => w.address === walletAddress);
       if (!wallet) {
@@ -147,45 +71,55 @@ export const useWalletManagement = () => {
       }
 
       if (wallet.walletClientType === 'privy') {
-        // TODO: Check wallet balance before deletion
-        // For now, we'll assume the wallet is empty as requested
-        await deleteWalletRecord(walletAddress);
-        toast.success('Empty embedded wallet deleted successfully');
-        toast.info('Note: Always ensure the wallet is empty before deletion to prevent loss of funds');
-      } else {
-        toast.error('This operation is only for embedded wallets');
+        throw new Error('Cannot unlink embedded wallets');
       }
+
+      // Unlink from Privy
+      await wallet.unlink();
+      
+      // Remove from database
+      await removeWalletFromDB(walletAddress);
+      
+      toast.success('External wallet unlinked successfully');
+    } catch (error) {
+      console.error('Error unlinking wallet:', error);
+      toast.error('Failed to unlink wallet');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const deleteEmbeddedWallet = async (walletAddress: string) => {
+    setIsLoading(true);
+    try {
+      const wallet = wallets.find(w => w.address === walletAddress);
+      if (!wallet) {
+        throw new Error('Wallet not found');
+      }
+
+      if (wallet.walletClientType !== 'privy') {
+        throw new Error('Can only delete embedded wallets');
+      }
+
+      // For now, we'll just remove from database since we can't actually delete embedded wallets
+      // In a real implementation, you'd need to check if the wallet is empty first
+      await removeWalletFromDB(walletAddress);
+      
+      toast.success('Embedded wallet removed from records');
     } catch (error) {
       console.error('Error deleting embedded wallet:', error);
       toast.error('Failed to delete embedded wallet');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  // Sync wallets with database on wallet changes
-  useEffect(() => {
-    const syncWallets = async () => {
-      if (!user || !wallets.length) return;
-
-      for (const wallet of wallets) {
-        const walletType = wallet.walletClientType === 'privy' ? 'embedded' : 'external';
-        await storeWallet(wallet.address, walletType);
-      }
-    };
-
-    syncWallets();
-  }, [wallets, user]);
-
-  useEffect(() => {
-    fetchStoredWallets();
-  }, [user, wallets]);
-
   return {
-    storedWallets,
-    loading,
-    handleUnlinkWallet,
-    handleDeleteEmbeddedWallet,
-    fetchStoredWallets
+    storeWalletInDB,
+    removeWalletFromDB,
+    syncWalletsWithDB,
+    unlinkExternalWallet,
+    deleteEmbeddedWallet,
+    isLoading
   };
 };
