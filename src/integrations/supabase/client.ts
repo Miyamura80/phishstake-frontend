@@ -12,19 +12,15 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
-    persistSession: false, // Changed to false since we're using Privy for auth
+    persistSession: false,
     autoRefreshToken: false,
   }
 });
 
-// Function to set the auth token from Privy
-export const setSupabaseAuth = (token: string) => {
-  supabase.auth.setSession({
-    access_token: token,
-    refresh_token: '',
-    expires_in: 3600,
-    expires_at: Math.floor(Date.now() / 1000) + 3600,
-    token_type: 'bearer',
-    user: null
-  });
+// Function to set user context for RLS
+export const setUserContext = async (userId: string) => {
+  const { error } = await supabase.rpc('set_user_context', { user_id_param: userId });
+  if (error) {
+    console.error('Error setting user context:', error);
+  }
 };

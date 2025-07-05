@@ -27,10 +27,10 @@ interface Definition {
 }
 
 const DefinitionsPage = () => {
-  const { user, authenticated, getAccessToken } = usePrivy();
+  const { user } = usePrivy();
+  const { authenticated } = useSupabaseAuth(); // This sets up the user context
   const { wallets } = useWallets();
   const { deployDefinition, isDeploying } = useSmartContract();
-  useSupabaseAuth(); // This sets up the auth integration
   
   const [definitions, setDefinitions] = useState<Definition[]>([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -64,12 +64,6 @@ const DefinitionsPage = () => {
     if (!authenticated || !user) return;
     
     try {
-      // Ensure we have a valid token before making the request
-      const token = await getAccessToken();
-      if (token) {
-        supabase.rest.headers['Authorization'] = `Bearer ${token}`;
-      }
-
       const { data, error } = await supabase
         .from('definitions')
         .select('*')
@@ -103,12 +97,6 @@ const DefinitionsPage = () => {
 
     setLoading(true);
     try {
-      // Ensure we have a valid token before making the request
-      const token = await getAccessToken();
-      if (token) {
-        supabase.rest.headers['Authorization'] = `Bearer ${token}`;
-      }
-
       const definitionData = {
         description: formData.description,
         stake_amount: formData.stake_amount,
