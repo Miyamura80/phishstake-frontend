@@ -24,7 +24,7 @@ const App = () => (
         requireUserPasswordOnCreate: false,
       },
       supportedChains: [
-        // Add your supported chains here
+        "USDC"
       ],
     }}
   >
