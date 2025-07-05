@@ -1,17 +1,24 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { toast } from "sonner";
-import { Wallet, Plus, Check } from "lucide-react";
+import { Wallet, Plus, Check, Unlink, Trash2 } from "lucide-react";
+import { useWalletManagement } from "@/hooks/useWalletManagement";
 
 const WalletPage = () => {
   const { user, createWallet, linkWallet } = usePrivy();
   const { wallets, ready } = useWallets();
   const [defaultWallet, setDefaultWallet] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  const {
+    storedWallets,
+    loading: walletManagementLoading,
+    handleUnlinkWallet,
+    handleDeleteEmbeddedWallet
+  } = useWalletManagement();
 
   useEffect(() => {
     // Load default wallet from local storage
@@ -63,10 +70,31 @@ const WalletPage = () => {
 
   const handleFundWallet = (wallet: any) => {
     if (wallet.walletClientType === 'privy') {
-      // For embedded wallets, we can use Privy's funding options
       toast.info('Funding options will be integrated with Privy SDK');
     } else {
       toast.info('Please fund your external wallet through your wallet provider');
+    }
+  };
+
+  const handleWalletAction = async (wallet: any, action: 'unlink' | 'delete') => {
+    const isOperationInProgress = loading || walletManagementLoading;
+    if (isOperationInProgress) {
+      toast.error('Please wait for the current operation to complete');
+      return;
+    }
+
+    if (action === 'unlink' && wallet.walletClientType !== 'privy') {
+      await handleUnlinkWallet(wallet.address);
+    } else if (action === 'delete' && wallet.walletClientType === 'privy') {
+      // Show confirmation dialog for embedded wallet deletion
+      const confirmDelete = window.confirm(
+        'Are you sure you want to delete this embedded wallet? This action cannot be undone. Make sure the wallet is empty to prevent loss of funds.'
+      );
+      if (confirmDelete) {
+        await handleDeleteEmbeddedWallet(wallet.address);
+      }
+    } else {
+      toast.error('Invalid operation for this wallet type');
     }
   };
 
@@ -109,56 +137,84 @@ const WalletPage = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {wallets.map((wallet) => (
-                  <div
-                    key={wallet.address}
-                    className="flex items-center justify-between p-4 bg-slate-700 rounded-lg"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="h-10 w-10 bg-blue-600 rounded-full flex items-center justify-center">
-                        <Wallet className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-white font-medium">
-                            {formatAddress(wallet.address)}
-                          </span>
-                          <Badge variant="secondary" className="bg-slate-600 text-slate-300">
-                            {getWalletType(wallet)}
-                          </Badge>
-                          {defaultWallet === wallet.address && (
-                            <Badge className="bg-green-600 text-white">
-                              Default
-                            </Badge>
-                          )}
+                {wallets.map((wallet) => {
+                  const isEmbedded = wallet.walletClientType === 'privy';
+                  const isDefault = defaultWallet === wallet.address;
+                  
+                  return (
+                    <div
+                      key={wallet.address}
+                      className="flex items-center justify-between p-4 bg-slate-700 rounded-lg"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="h-10 w-10 bg-blue-600 rounded-full flex items-center justify-center">
+                          <Wallet className="h-5 w-5 text-white" />
                         </div>
-                        <p className="text-slate-400 text-sm">
-                          {wallet.chainId ? `Chain ID: ${wallet.chainId}` : 'Multi-chain'}
-                        </p>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-white font-medium">
+                              {formatAddress(wallet.address)}
+                            </span>
+                            <Badge variant="secondary" className="bg-slate-600 text-slate-300">
+                              {getWalletType(wallet)}
+                            </Badge>
+                            {isDefault && (
+                              <Badge className="bg-green-600 text-white">
+                                Default
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-slate-400 text-sm">
+                            {wallet.chainId ? `Chain ID: ${wallet.chainId}` : 'Multi-chain'}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      {defaultWallet !== wallet.address && (
+                      <div className="flex space-x-2">
+                        {!isDefault && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleSetDefault(wallet.address)}
+                            className="border-slate-600 text-slate-300 hover:bg-slate-600"
+                          >
+                            <Check className="h-3 w-3 mr-1" />
+                            Set Default
+                          </Button>
+                        )}
                         <Button
                           size="sm"
-                          variant="outline"
-                          onClick={() => handleSetDefault(wallet.address)}
-                          className="border-slate-600 text-slate-300 hover:bg-slate-600"
+                          onClick={() => handleFundWallet(wallet)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
                         >
-                          <Check className="h-3 w-3 mr-1" />
-                          Set Default
+                          Fund
                         </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        onClick={() => handleFundWallet(wallet)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
-                      >
-                        Fund
-                      </Button>
+                        {!isEmbedded ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleWalletAction(wallet, 'unlink')}
+                            disabled={loading || walletManagementLoading}
+                            className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                          >
+                            <Unlink className="h-3 w-3 mr-1" />
+                            Unlink
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleWalletAction(wallet, 'delete')}
+                            disabled={loading || walletManagementLoading}
+                            className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" />
+                            Delete
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -209,13 +265,14 @@ const WalletPage = () => {
       {wallets.length > 0 && (
         <Card className="bg-slate-800 border-slate-700">
           <CardHeader>
-            <CardTitle className="text-white">Wallet Rules</CardTitle>
+            <CardTitle className="text-white">Wallet Rules & Safety</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 text-slate-400">
               <p>• You can have multiple wallets connected, but only one default wallet for staking</p>
-              <p>• Embedded wallets support Privy's built-in funding options</p>
-              <p>• External wallets must be funded separately through your wallet provider</p>
+              <p>• Embedded wallets are stored in the database to prevent accidental loss</p>
+              <p>• External wallets can be unlinked safely without losing access</p>
+              <p>• Only delete embedded wallets that are confirmed empty to prevent fund loss</p>
               <p>• USDC is required for staking on phishing definitions</p>
             </div>
           </CardContent>
