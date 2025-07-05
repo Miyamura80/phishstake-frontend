@@ -71,7 +71,6 @@ const WalletPage = () => {
     try {
       await createWallet();
       toast.success('Embedded wallet created successfully');
-      // Sync will happen automatically via the useEffect above
     } catch (error) {
       console.error('Error creating wallet:', error);
       toast.error('Failed to create embedded wallet');
@@ -85,7 +84,6 @@ const WalletPage = () => {
     try {
       await linkWallet();
       toast.success('External wallet linked successfully');
-      // Sync will happen automatically via the useEffect above
     } catch (error) {
       console.error('Error linking wallet:', error);
       toast.error('Failed to link external wallet');
