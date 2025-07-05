@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { useSmartContract } from "@/hooks/useSmartContract";
 import { toast } from "sonner";
 import { Edit, Trash2, Plus, Shield, Wallet } from "lucide-react";
@@ -26,9 +27,11 @@ interface Definition {
 }
 
 const DefinitionsPage = () => {
-  const { user } = usePrivy();
+  const { user, authenticated, getAccessToken } = usePrivy();
   const { wallets } = useWallets();
   const { deployDefinition, isDeploying } = useSmartContract();
+  useSupabaseAuth(); // This sets up the auth integration
+  
   const [definitions, setDefinitions] = useState<Definition[]>([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDeployDialogOpen, setIsDeployDialogOpen] = useState(false);
@@ -42,10 +45,10 @@ const DefinitionsPage = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (user) {
+    if (authenticated && user) {
       fetchDefinitions();
     }
-  }, [user]);
+  }, [authenticated, user]);
 
   useEffect(() => {
     // Set default wallet if available
@@ -58,14 +61,25 @@ const DefinitionsPage = () => {
   }, [wallets, user]);
 
   const fetchDefinitions = async () => {
+    if (!authenticated || !user) return;
+    
     try {
+      // Ensure we have a valid token before making the request
+      const token = await getAccessToken();
+      if (token) {
+        supabase.rest.headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const { data, error } = await supabase
         .from('definitions')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
       
       // Type cast the data to ensure status is properly typed
       const typedData = (data || []).map(item => ({
@@ -82,10 +96,19 @@ const DefinitionsPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!authenticated || !user) {
+      toast.error('Please log in to create definitions');
+      return;
+    }
 
     setLoading(true);
     try {
+      // Ensure we have a valid token before making the request
+      const token = await getAccessToken();
+      if (token) {
+        supabase.rest.headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const definitionData = {
         description: formData.description,
         stake_amount: formData.stake_amount,
@@ -93,20 +116,28 @@ const DefinitionsPage = () => {
         status: 'draft' as const
       };
 
+      console.log('Attempting to save definition:', definitionData);
+
       if (editingDefinition) {
         const { error } = await supabase
           .from('definitions')
           .update(definitionData)
           .eq('id', editingDefinition.id);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Update error:', error);
+          throw error;
+        }
         toast.success('Definition updated successfully');
       } else {
         const { error } = await supabase
           .from('definitions')
           .insert([definitionData]);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Insert error:', error);
+          throw error;
+        }
         toast.success('Definition created successfully');
       }
 
@@ -116,7 +147,7 @@ const DefinitionsPage = () => {
       fetchDefinitions();
     } catch (error) {
       console.error('Error saving definition:', error);
-      toast.error('Failed to save definition');
+      toast.error('Failed to save definition. Please make sure you are logged in.');
     } finally {
       setLoading(false);
     }
@@ -201,6 +232,23 @@ const DefinitionsPage = () => {
   const getWalletType = (wallet: any) => {
     return wallet.walletClientType === 'privy' ? 'Embedded' : 'External';
   };
+
+  // Show login prompt if not authenticated
+  if (!authenticated) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="text-center py-12">
+          <Shield className="h-16 w-16 text-slate-600 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-slate-400 mb-2">
+            Authentication Required
+          </h3>
+          <p className="text-slate-500 mb-6">
+            Please log in to create and manage your anti-phishing definitions
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
