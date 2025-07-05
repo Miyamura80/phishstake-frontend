@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { supabase } from '@/integrations/supabase/client';
@@ -91,8 +90,10 @@ export const useWalletManagement = () => {
 
   const unlinkExternalWallet = async (walletAddress: string) => {
     setIsLoading(true);
+    console.log('Starting unlink process for wallet:', walletAddress);
+    
     try {
-      // First validate the wallet exists in Privy
+      // First validate the wallet exists in Privy and get the exact wallet object
       const wallet = validateWalletInPrivy(walletAddress);
       if (!wallet) {
         console.log('Wallet not found in Privy, removing from local records only');
@@ -101,43 +102,66 @@ export const useWalletManagement = () => {
         return;
       }
 
+      console.log('Found wallet in Privy:', wallet);
+
       if (wallet.walletClientType === 'privy') {
         throw new Error('Cannot unlink embedded wallets');
       }
 
-      // Attempt to unlink from Privy
+      // Use the exact address from the Privy wallet object
+      const privyWalletAddress = wallet.address;
+      console.log('Using exact Privy address for unlinking:', privyWalletAddress);
+
+      // Attempt to unlink from Privy using the exact address format
       try {
-        await unlinkWallet(walletAddress);
+        await unlinkWallet(privyWalletAddress);
         console.log('Successfully unlinked wallet from Privy');
+        toast.success('External wallet unlinked successfully');
       } catch (privyError: any) {
         console.error('Privy unlink error:', privyError);
+        console.error('Error details:', {
+          message: privyError?.message,
+          code: privyError?.code,
+          status: privyError?.status
+        });
         
-        // Handle specific Privy errors
-        if (privyError?.message?.includes('linked_account_not_found') || 
-            privyError?.message?.includes('Account not found')) {
+        // Handle specific Privy errors more robustly
+        const errorMessage = privyError?.message?.toLowerCase() || '';
+        const isWalletNotFound = 
+          errorMessage.includes('linked_account_not_found') || 
+          errorMessage.includes('account not found') ||
+          errorMessage.includes('wallet not found') ||
+          privyError?.code === 'linked_account_not_found';
+        
+        if (isWalletNotFound) {
           console.log('Wallet not found in Privy, proceeding with local cleanup');
           toast.info('Wallet was not linked in Privy, removing from local records');
         } else {
-          // Re-throw other errors
+          // Re-throw other errors to be handled in the outer catch
           throw privyError;
         }
       }
       
       // Always remove from database regardless of Privy result
+      console.log('Removing wallet from local database');
       await removeWalletFromDB(walletAddress);
       
-      toast.success('External wallet unlinked successfully');
     } catch (error: any) {
-      console.error('Error unlinking wallet:', error);
+      console.error('Error in unlinkExternalWallet:', error);
       
       // Provide specific error messages
       if (error.message === 'Cannot unlink embedded wallets') {
         toast.error('Cannot unlink embedded wallets. Use delete instead.');
-      } else if (error.message?.includes('linked_account_not_found')) {
-        toast.info('Wallet was already unlinked, removing from records');
-        await removeWalletFromDB(walletAddress);
       } else {
-        toast.error(`Failed to unlink wallet: ${error.message || 'Unknown error'}`);
+        // For any other error, still try to remove from local DB as a fallback
+        console.log('Attempting to remove from local DB as fallback');
+        try {
+          await removeWalletFromDB(walletAddress);
+          toast.info('Wallet removed from local records, but may still exist in Privy');
+        } catch (dbError) {
+          console.error('Failed to remove from local DB:', dbError);
+          toast.error(`Failed to unlink wallet: ${error.message || 'Unknown error'}`);
+        }
       }
     } finally {
       setIsLoading(false);
