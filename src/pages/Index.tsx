@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { Shield, Wallet, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -130,8 +131,20 @@ const LandingPage = () => {
 };
 
 const Index = () => {
-  const { authenticated } = usePrivy();
+  const { authenticated, ready, isSettingUp } = useSupabaseAuth();
   const [currentPage, setCurrentPage] = useState('definitions');
+
+  // Show loading while authentication is being set up
+  if (!ready || isSettingUp) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-slate-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!authenticated) {
     return <LandingPage />;
