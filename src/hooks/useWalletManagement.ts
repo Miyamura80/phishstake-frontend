@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export const useWalletManagement = () => {
-  const { user } = usePrivy();
+  const { user, unlinkWallet } = usePrivy();
   const { wallets } = useWallets();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -74,8 +74,8 @@ export const useWalletManagement = () => {
         throw new Error('Cannot unlink embedded wallets');
       }
 
-      // Unlink from Privy
-      await wallet.unlink();
+      // Use the correct Privy method to unlink external wallets
+      await unlinkWallet(walletAddress);
       
       // Remove from database
       await removeWalletFromDB(walletAddress);
@@ -101,11 +101,12 @@ export const useWalletManagement = () => {
         throw new Error('Can only delete embedded wallets');
       }
 
-      // For now, we'll just remove from database since we can't actually delete embedded wallets
-      // In a real implementation, you'd need to check if the wallet is empty first
+      // For embedded wallets, we can only remove from our database records
+      // Privy doesn't allow deleting embedded wallets via SDK
       await removeWalletFromDB(walletAddress);
       
       toast.success('Embedded wallet removed from records');
+      toast.info('Note: The embedded wallet still exists in Privy but is no longer tracked');
     } catch (error) {
       console.error('Error deleting embedded wallet:', error);
       toast.error('Failed to delete embedded wallet');
