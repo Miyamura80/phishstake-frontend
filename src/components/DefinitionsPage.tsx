@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,7 +66,14 @@ const DefinitionsPage = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setDefinitions(data || []);
+      
+      // Type cast the data to ensure status is properly typed
+      const typedData = (data || []).map(item => ({
+        ...item,
+        status: item.status as 'draft' | 'deployed'
+      }));
+      
+      setDefinitions(typedData);
     } catch (error) {
       console.error('Error fetching definitions:', error);
       toast.error('Failed to fetch definitions');
