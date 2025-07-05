@@ -7,10 +7,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { useSmartContract } from "@/hooks/useSmartContract";
 import { toast } from "sonner";
-import { Edit, Trash2, Plus, Shield } from "lucide-react";
+import { Edit, Trash2, Plus, Shield, Wallet } from "lucide-react";
 
 interface Definition {
   id: string;
@@ -19,13 +21,21 @@ interface Definition {
   status: 'draft' | 'deployed';
   created_at: string;
   updated_at: string;
+  transaction_hash?: string;
+  definition_hash?: string;
+  wallet_hash?: string;
 }
 
 const DefinitionsPage = () => {
   const { user } = usePrivy();
+  const { wallets } = useWallets();
+  const { deployDefinition, isDeploying } = useSmartContract();
   const [definitions, setDefinitions] = useState<Definition[]>([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isDeployDialogOpen, setIsDeployDialogOpen] = useState(false);
   const [editingDefinition, setEditingDefinition] = useState<Definition | null>(null);
+  const [deployingDefinition, setDeployingDefinition] = useState<Definition | null>(null);
+  const [selectedWallet, setSelectedWallet] = useState<string>('');
   const [formData, setFormData] = useState({
     description: '',
     stake_amount: 0
@@ -37,6 +47,16 @@ const DefinitionsPage = () => {
       fetchDefinitions();
     }
   }, [user]);
+
+  useEffect(() => {
+    // Set default wallet if available
+    const defaultWallet = localStorage.getItem(`defaultWallet_${user?.id}`);
+    if (defaultWallet && wallets.find(w => w.address === defaultWallet)) {
+      setSelectedWallet(defaultWallet);
+    } else if (wallets.length > 0) {
+      setSelectedWallet(wallets[0].address);
+    }
+  }, [wallets, user]);
 
   const fetchDefinitions = async () => {
     try {
@@ -112,9 +132,41 @@ const DefinitionsPage = () => {
     }
   };
 
-  const handleDeploy = async (definition: Definition) => {
-    // This will be implemented when wallet integration is complete
-    toast.info('Deploy functionality will be available after wallet setup');
+  const handleDeploy = async () => {
+    if (!deployingDefinition || !selectedWallet) {
+      toast.error('Please select a wallet and definition to deploy');
+      return;
+    }
+
+    try {
+      // Deploy to smart contract
+      const result = await deployDefinition(
+        deployingDefinition.description,
+        deployingDefinition.stake_amount,
+        selectedWallet
+      );
+
+      // Update database with deployment info
+      const { error } = await supabase
+        .from('definitions')
+        .update({
+          status: 'deployed',
+          transaction_hash: result.transactionHash,
+          definition_hash: result.definitionHash,
+          wallet_hash: result.walletHash
+        })
+        .eq('id', deployingDefinition.id);
+
+      if (error) throw error;
+
+      toast.success('Definition deployed successfully!');
+      setIsDeployDialogOpen(false);
+      setDeployingDefinition(null);
+      fetchDefinitions();
+    } catch (error) {
+      console.error('Error deploying definition:', error);
+      toast.error('Failed to deploy definition');
+    }
   };
 
   const openEditDialog = (definition: Definition) => {
@@ -126,9 +178,22 @@ const DefinitionsPage = () => {
     setIsCreateDialogOpen(true);
   };
 
+  const openDeployDialog = (definition: Definition) => {
+    setDeployingDefinition(definition);
+    setIsDeployDialogOpen(true);
+  };
+
   const resetForm = () => {
     setFormData({ description: '', stake_amount: 0 });
     setEditingDefinition(null);
+  };
+
+  const formatAddress = (address: string) => {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  const getWalletType = (wallet: any) => {
+    return wallet.walletClientType === 'privy' ? 'Embedded' : 'External';
   };
 
   return (
@@ -200,6 +265,65 @@ const DefinitionsPage = () => {
             </form>
           </DialogContent>
         </Dialog>
+
+        {/* Deploy Dialog */}
+        <Dialog open={isDeployDialogOpen} onOpenChange={setIsDeployDialogOpen}>
+          <DialogContent className="bg-slate-800 border-slate-700 text-white">
+            <DialogHeader>
+              <DialogTitle>Deploy Definition</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label className="text-slate-300">Definition</Label>
+                <div className="p-3 bg-slate-700 rounded-md">
+                  <p className="text-white text-sm">{deployingDefinition?.description}</p>
+                  <p className="text-blue-400 text-sm mt-2">
+                    Stake: {deployingDefinition?.stake_amount} USDC
+                  </p>
+                </div>
+              </div>
+              
+              <div>
+                <Label className="text-slate-300">Select Wallet</Label>
+                <Select value={selectedWallet} onValueChange={setSelectedWallet}>
+                  <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                    <SelectValue placeholder="Choose a wallet" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-700 border-slate-600">
+                    {wallets.map((wallet) => (
+                      <SelectItem key={wallet.address} value={wallet.address} className="text-white">
+                        <div className="flex items-center space-x-2">
+                          <Wallet className="h-4 w-4" />
+                          <span>{formatAddress(wallet.address)}</span>
+                          <Badge variant="secondary" className="text-xs">
+                            {getWalletType(wallet)}
+                          </Badge>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsDeployDialogOpen(false)}
+                  className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleDeploy}
+                  disabled={isDeploying || !selectedWallet}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {isDeploying ? 'Deploying...' : 'Deploy to Blockchain'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -230,6 +354,12 @@ const DefinitionsPage = () => {
                   </span>
                 </div>
                 
+                {definition.status === 'deployed' && definition.transaction_hash && (
+                  <div className="text-xs text-slate-500">
+                    <span>TX: {definition.transaction_hash.slice(0, 10)}...{definition.transaction_hash.slice(-6)}</span>
+                  </div>
+                )}
+                
                 <div className="flex space-x-2">
                   {definition.status === 'draft' && (
                     <>
@@ -253,14 +383,25 @@ const DefinitionsPage = () => {
                     </>
                   )}
                   
-                  {definition.status === 'draft' && (
+                  {definition.status === 'draft' && wallets.length > 0 && (
                     <Button
                       size="sm"
-                      onClick={() => handleDeploy(definition)}
+                      onClick={() => openDeployDialog(definition)}
                       className="bg-blue-600 hover:bg-blue-700 text-white flex-1"
                     >
                       <Shield className="h-3 w-3 mr-1" />
                       Deploy
+                    </Button>
+                  )}
+
+                  {definition.status === 'draft' && wallets.length === 0 && (
+                    <Button
+                      size="sm"
+                      disabled
+                      className="bg-slate-600 text-slate-400 flex-1"
+                    >
+                      <Wallet className="h-3 w-3 mr-1" />
+                      Need Wallet
                     </Button>
                   )}
                 </div>
