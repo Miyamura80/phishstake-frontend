@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { PrivyProvider } from '@privy-io/react-auth';
+import { mainnet } from 'viem/chains';
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -23,9 +24,7 @@ const App = () => (
         createOnLogin: 'off',
         requireUserPasswordOnCreate: false,
       },
-      supportedChains: [
-        "USDC"
-      ],
+      supportedChains: [mainnet],
     }}
   >
     <QueryClientProvider client={queryClient}>
