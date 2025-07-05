@@ -62,28 +62,83 @@ export const useWalletManagement = () => {
     }
   };
 
+  const validateWalletInPrivy = (walletAddress: string) => {
+    return wallets.find(w => w.address.toLowerCase() === walletAddress.toLowerCase());
+  };
+
+  const syncLocalStateWithPrivy = async () => {
+    if (!user) return;
+
+    // Get wallets from database
+    const { data: dbWallets } = await supabase
+      .from('user_wallets')
+      .select('wallet_address')
+      .eq('user_id', user.id);
+
+    if (!dbWallets) return;
+
+    // Remove wallets from DB that are no longer in Privy
+    const privyAddresses = wallets.map(w => w.address.toLowerCase());
+    const orphanedWallets = dbWallets.filter(
+      dbWallet => !privyAddresses.includes(dbWallet.wallet_address.toLowerCase())
+    );
+
+    for (const orphaned of orphanedWallets) {
+      console.log('Removing orphaned wallet from DB:', orphaned.wallet_address);
+      await removeWalletFromDB(orphaned.wallet_address);
+    }
+  };
+
   const unlinkExternalWallet = async (walletAddress: string) => {
     setIsLoading(true);
     try {
-      const wallet = wallets.find(w => w.address === walletAddress);
+      // First validate the wallet exists in Privy
+      const wallet = validateWalletInPrivy(walletAddress);
       if (!wallet) {
-        throw new Error('Wallet not found');
+        console.log('Wallet not found in Privy, removing from local records only');
+        await removeWalletFromDB(walletAddress);
+        toast.success('Wallet removed from local records');
+        return;
       }
 
       if (wallet.walletClientType === 'privy') {
         throw new Error('Cannot unlink embedded wallets');
       }
 
-      // Use the correct Privy method to unlink external wallets
-      await unlinkWallet(walletAddress);
+      // Attempt to unlink from Privy
+      try {
+        await unlinkWallet(walletAddress);
+        console.log('Successfully unlinked wallet from Privy');
+      } catch (privyError: any) {
+        console.error('Privy unlink error:', privyError);
+        
+        // Handle specific Privy errors
+        if (privyError?.message?.includes('linked_account_not_found') || 
+            privyError?.message?.includes('Account not found')) {
+          console.log('Wallet not found in Privy, proceeding with local cleanup');
+          toast.info('Wallet was not linked in Privy, removing from local records');
+        } else {
+          // Re-throw other errors
+          throw privyError;
+        }
+      }
       
-      // Remove from database
+      // Always remove from database regardless of Privy result
       await removeWalletFromDB(walletAddress);
       
       toast.success('External wallet unlinked successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error unlinking wallet:', error);
-      toast.error('Failed to unlink wallet');
+      
+      // Provide specific error messages
+      if (error.message === 'Cannot unlink embedded wallets') {
+        toast.error('Cannot unlink embedded wallets. Use delete instead.');
+      } else if (error.message?.includes('linked_account_not_found')) {
+        toast.info('Wallet was already unlinked, removing from records');
+        await removeWalletFromDB(walletAddress);
+      } else {
+        toast.error(`Failed to unlink wallet: ${error.message || 'Unknown error'}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -92,9 +147,13 @@ export const useWalletManagement = () => {
   const deleteEmbeddedWallet = async (walletAddress: string) => {
     setIsLoading(true);
     try {
-      const wallet = wallets.find(w => w.address === walletAddress);
+      // First validate the wallet exists in Privy
+      const wallet = validateWalletInPrivy(walletAddress);
       if (!wallet) {
-        throw new Error('Wallet not found');
+        console.log('Embedded wallet not found in Privy, removing from local records only');
+        await removeWalletFromDB(walletAddress);
+        toast.success('Wallet removed from local records');
+        return;
       }
 
       if (wallet.walletClientType !== 'privy') {
@@ -107,9 +166,14 @@ export const useWalletManagement = () => {
       
       toast.success('Embedded wallet removed from records');
       toast.info('Note: The embedded wallet still exists in Privy but is no longer tracked');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting embedded wallet:', error);
-      toast.error('Failed to delete embedded wallet');
+      
+      if (error.message === 'Can only delete embedded wallets') {
+        toast.error('Can only delete embedded wallets. Use unlink for external wallets.');
+      } else {
+        toast.error(`Failed to delete embedded wallet: ${error.message || 'Unknown error'}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -119,6 +183,8 @@ export const useWalletManagement = () => {
     storeWalletInDB,
     removeWalletFromDB,
     syncWalletsWithDB,
+    syncLocalStateWithPrivy,
+    validateWalletInPrivy,
     unlinkExternalWallet,
     deleteEmbeddedWallet,
     isLoading

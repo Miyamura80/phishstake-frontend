@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { toast } from "sonner";
-import { Wallet, Plus, Check, Unlink, Trash2 } from "lucide-react";
+import { Wallet, Plus, Check, Unlink, Trash2, RefreshCw } from "lucide-react";
 import { useWalletManagement } from "@/hooks/useWalletManagement";
 
 const WalletPage = () => {
@@ -16,6 +16,7 @@ const WalletPage = () => {
   const {
     unlinkExternalWallet,
     deleteEmbeddedWallet,
+    syncLocalStateWithPrivy,
     isLoading: walletManagementLoading
   } = useWalletManagement();
 
@@ -26,6 +27,13 @@ const WalletPage = () => {
       setDefaultWallet(saved);
     }
   }, [wallets, user]);
+
+  // Sync local state with Privy on component mount
+  useEffect(() => {
+    if (ready && user && wallets.length > 0) {
+      syncLocalStateWithPrivy().catch(console.error);
+    }
+  }, [ready, user, wallets.length, syncLocalStateWithPrivy]);
 
   const handleCreateEmbeddedWallet = async () => {
     setLoading(true);
@@ -48,6 +56,19 @@ const WalletPage = () => {
     } catch (error) {
       console.error('Error linking wallet:', error);
       toast.error('Failed to link external wallet');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSyncWallets = async () => {
+    setLoading(true);
+    try {
+      await syncLocalStateWithPrivy();
+      toast.success('Wallet state synchronized');
+    } catch (error) {
+      console.error('Error syncing wallets:', error);
+      toast.error('Failed to sync wallet state');
     } finally {
       setLoading(false);
     }
@@ -111,8 +132,22 @@ const WalletPage = () => {
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       <div className="mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Wallet Management</h1>
-        <p className="text-slate-400">Manage your USDC wallets for staking on definitions</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Wallet Management</h1>
+            <p className="text-slate-400">Manage your USDC wallets for staking on definitions</p>
+          </div>
+          <Button
+            onClick={handleSyncWallets}
+            disabled={loading || walletManagementLoading}
+            variant="outline"
+            size="sm"
+            className="border-slate-600 text-slate-300 hover:bg-slate-700"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Sync
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:gap-6 mb-6 sm:mb-8">
@@ -273,6 +308,7 @@ const WalletPage = () => {
               <p>• External wallets can be unlinked safely without losing access</p>
               <p>• Only delete embedded wallets that are confirmed empty to prevent fund loss</p>
               <p>• USDC is required for staking on phishing definitions</p>
+              <p>• Use the Sync button if wallets appear out of sync between Privy and local records</p>
             </div>
           </CardContent>
         </Card>
