@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,10 +14,9 @@ const WalletPage = () => {
   const [loading, setLoading] = useState(false);
   
   const {
-    storedWallets,
-    loading: walletManagementLoading,
-    handleUnlinkWallet,
-    handleDeleteEmbeddedWallet
+    unlinkExternalWallet,
+    deleteEmbeddedWallet,
+    isLoading: walletManagementLoading
   } = useWalletManagement();
 
   useEffect(() => {
@@ -85,14 +83,14 @@ const WalletPage = () => {
     }
 
     if (action === 'unlink' && wallet.walletClientType !== 'privy') {
-      await handleUnlinkWallet(wallet.address);
+      await unlinkExternalWallet(wallet.address);
     } else if (action === 'delete' && wallet.walletClientType === 'privy') {
       // Show confirmation dialog for embedded wallet deletion
       const confirmDelete = window.confirm(
         'Are you sure you want to delete this embedded wallet? This action cannot be undone. Make sure the wallet is empty to prevent loss of funds.'
       );
       if (confirmDelete) {
-        await handleDeleteEmbeddedWallet(wallet.address);
+        await deleteEmbeddedWallet(wallet.address);
       }
     } else {
       toast.error('Invalid operation for this wallet type');
@@ -153,14 +151,14 @@ const WalletPage = () => {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2 mb-1">
-                            <span className="text-white font-medium text-sm sm:text-base">
+                            <span className="text-white font-medium text-sm sm:text-base break-all">
                               {formatAddress(wallet.address)}
                             </span>
-                            <Badge variant="secondary" className="bg-slate-600 text-slate-300 text-xs">
+                            <Badge variant="secondary" className="bg-slate-600 text-slate-300 text-xs whitespace-nowrap">
                               {getWalletType(wallet)}
                             </Badge>
                             {isDefault && (
-                              <Badge className="bg-green-600 text-white text-xs">
+                              <Badge className="bg-green-600 text-white text-xs whitespace-nowrap">
                                 Default
                               </Badge>
                             )}
@@ -170,13 +168,13 @@ const WalletPage = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2 sm:flex-nowrap">
                         {!isDefault && (
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => handleSetDefault(wallet.address)}
-                            className="border-slate-600 text-slate-300 hover:bg-slate-600 text-xs"
+                            className="border-slate-600 text-slate-300 hover:bg-slate-600 text-xs whitespace-nowrap"
                           >
                             <Check className="h-3 w-3 mr-1" />
                             Set Default
@@ -185,7 +183,7 @@ const WalletPage = () => {
                         <Button
                           size="sm"
                           onClick={() => handleFundWallet(wallet)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs whitespace-nowrap"
                         >
                           Fund
                         </Button>
@@ -195,7 +193,7 @@ const WalletPage = () => {
                             variant="outline"
                             onClick={() => handleWalletAction(wallet, 'unlink')}
                             disabled={loading || walletManagementLoading}
-                            className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white text-xs"
+                            className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white text-xs whitespace-nowrap"
                           >
                             <Unlink className="h-3 w-3 mr-1" />
                             Unlink
@@ -206,7 +204,7 @@ const WalletPage = () => {
                             variant="outline"
                             onClick={() => handleWalletAction(wallet, 'delete')}
                             disabled={loading || walletManagementLoading}
-                            className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white text-xs"
+                            className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white text-xs whitespace-nowrap"
                           >
                             <Trash2 className="h-3 w-3 mr-1" />
                             Delete
