@@ -12,7 +12,7 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <PrivyProvider
-    appId="your-privy-app-id" // Replace with your actual Privy app ID
+    appId="cmcqc7aun00zzl80m3lmes841" // Replace with your actual Privy app ID
     config={{
       loginMethods: ['email', 'google'],
       appearance: {
