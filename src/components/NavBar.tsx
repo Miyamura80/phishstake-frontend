@@ -8,7 +8,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator 
 } from "@/components/ui/dropdown-menu";
-import { Wallet, Shield, User, Menu, X, ChevronDown } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Wallet, Shield, User, Menu, X, ChevronDown, LogOut } from "lucide-react";
 import { useState } from "react";
 
 interface NavBarProps {
@@ -40,6 +41,13 @@ const NavBar = ({ onPageChange, currentPage }: NavBarProps) => {
   };
 
   const defaultWallet = getDefaultWallet();
+
+  const getUserInitials = () => {
+    if (user?.email?.address) {
+      return user.email.address.charAt(0).toUpperCase();
+    }
+    return 'U';
+  };
 
   return (
     <nav className="bg-slate-900 border-b border-slate-700 px-4 sm:px-6 py-4">
@@ -157,22 +165,50 @@ const NavBar = ({ onPageChange, currentPage }: NavBarProps) => {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* Desktop User Info */}
-              <div className="hidden sm:flex items-center space-x-2 text-slate-300">
-                <User className="h-4 w-4" />
-                <span className="text-sm truncate max-w-32 lg:max-w-none">
-                  {user?.email?.address || 'User'}
-                </span>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={logout}
-                className="border-slate-600 text-slate-300 hover:bg-slate-800 text-sm"
-              >
-                <span className="hidden sm:inline">Logout</span>
-                <span className="sm:hidden">Out</span>
-              </Button>
+              {/* User Profile Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex items-center space-x-2 text-slate-300 hover:bg-slate-800 hover:text-white"
+                  >
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="bg-blue-600 text-white text-xs">
+                        {getUserInitials()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent 
+                  align="end" 
+                  className="w-56 bg-slate-800 border-slate-700 text-slate-200"
+                >
+                  <div className="px-2 py-1.5 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                    Account
+                  </div>
+                  <DropdownMenuItem className="flex items-center space-x-2 focus:bg-slate-700 focus:text-slate-100">
+                    <User className="h-4 w-4" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">
+                        {user?.email?.address || 'User'}
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        Logged in
+                      </div>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-slate-700" />
+                  <DropdownMenuItem 
+                    onClick={logout}
+                    className="flex items-center space-x-2 focus:bg-slate-700 focus:text-slate-100 cursor-pointer text-red-400 focus:text-red-300"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Logout</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           ) : (
             <Button
@@ -224,12 +260,6 @@ const NavBar = ({ onPageChange, currentPage }: NavBarProps) => {
               <Wallet className="h-4 w-4" />
               <span>Manage Wallets</span>
             </Button>
-            
-            {/* Mobile User Info */}
-            <div className="sm:hidden flex items-center space-x-2 text-slate-400 px-3 py-2 text-sm">
-              <User className="h-4 w-4" />
-              <span className="truncate">{user?.email?.address || 'User'}</span>
-            </div>
           </div>
         </div>
       )}
