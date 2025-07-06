@@ -16,14 +16,3 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
-
-// Function to set user context for RLS
-export const setUserContext = async (userId: string) => {
-  console.log('Setting user context for RLS:', userId);
-  const { error } = await supabase.rpc('set_user_context', { user_id_param: userId });
-  if (error) {
-    console.error('Error setting user context:', error);
-  } else {
-    console.log('User context set successfully');
-  }
-};

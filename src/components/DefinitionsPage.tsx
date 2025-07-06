@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +29,7 @@ interface Definition {
 
 const DefinitionsPage = () => {
   const { user } = usePrivy();
-  const { authenticated } = useSupabaseAuth(); // This sets up the user context
+  const { authenticated } = useSupabaseAuth();
   const { wallets } = useWallets();
   const { deployDefinition, isDeploying } = useSmartContract();
   
@@ -63,6 +64,8 @@ const DefinitionsPage = () => {
   const fetchDefinitions = async () => {
     if (!authenticated || !user) return;
     
+    console.log('Fetching definitions for user:', user.id);
+    
     try {
       const { data, error } = await supabase
         .from('definitions')
@@ -74,6 +77,8 @@ const DefinitionsPage = () => {
         console.error('Supabase error:', error);
         throw error;
       }
+      
+      console.log('Fetched definitions:', data);
       
       // Type cast the data to ensure status is properly typed
       const typedData = (data || []).map(item => ({
@@ -96,6 +101,8 @@ const DefinitionsPage = () => {
     }
 
     setLoading(true);
+    console.log('Submitting definition for user:', user.id);
+    
     try {
       const definitionData = {
         description: formData.description,
@@ -135,7 +142,7 @@ const DefinitionsPage = () => {
       fetchDefinitions();
     } catch (error) {
       console.error('Error saving definition:', error);
-      toast.error('Failed to save definition. Please make sure you are logged in.');
+      toast.error('Failed to save definition. Please try again.');
     } finally {
       setLoading(false);
     }

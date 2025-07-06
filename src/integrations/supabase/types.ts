@@ -83,10 +83,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      set_user_context: {
-        Args: { user_id_param: string }
-        Returns: undefined
-      }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never
