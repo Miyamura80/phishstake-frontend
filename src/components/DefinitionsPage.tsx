@@ -380,7 +380,7 @@ const DefinitionsPage = () => {
           <Card key={definition.id} className="bg-slate-800 border-slate-700">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
-                <CardTitle className="text-white text-lg line-clamp-2">
+                <CardTitle className="text-white text-lg">
                   {definition.description}
                 </CardTitle>
                 <Badge 
